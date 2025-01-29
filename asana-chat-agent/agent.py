@@ -11,18 +11,54 @@ load_dotenv()
 api_key = os.getenv('OPENAI_API_KEY')
 model = "gpt-4o-mini"
 
+configuration = asana.Configuration()
+configuration.access_token = os.getenv('ASANA_ACCESS_TOKEN', '')
+api_client = asana.ApiClient(configuration)
+
 @tool
 def hello():
     """ This is a simple tool that returns a greeting message """
     print("Hello from the tool")
     pass
 
+@tool
+def create_asana_task(task_name, assignee_email, due_on="today"):
+    """
+    Creates a task in Asana with the given task name, assignee email, and due date.
+
+    Args:
+        task_name (str): The name of the task to be created.
+        assignee_email (str): The email of the person to whom the task will be assigned.
+        due_on (str, optional): The due date for the task. Defaults to "today".
+
+    Returns:
+        str: A message indicating the success or failure of the task creation.
+    """
+    if due_on == "today":
+        due_on = str(datetime.now().date())
+
+    tasks_api_instance = asana.TasksApi(api_client)
+
+    task_body = {
+        "data": {
+            "name": task_name,
+            "due_on": due_on,
+            "assignee_email": assignee_email,
+            "projects": [os.getenv("ASANA_PROJECT_ID", "")]
+        }
+    }
+    try:
+        api_response = tasks_api_instance.create_task(task_body, {})
+        return f"Task created successfully with id: {api_response}"
+    except asana.ApiException as e:
+        return f"Exception when calling TasksApi->create_task: {e}"
+
 def get_openai_response(messages, nested_calls=0):
     if nested_calls > 3:
         raise Exception("Too many nested calls")
     
     # list of all available tools
-    tools = [hello]
+    tools = [hello, create_asana_task]
     
     # Create a client and bind the tools to it
     client = ChatOpenAI(model=model)
@@ -37,7 +73,8 @@ def get_openai_response(messages, nested_calls=0):
     # If there are tool calls, call the tools and add the results to the messages list
     if tool_calls > 0:
         available_functions = {
-            "hello": hello
+            "hello": hello,
+            "create_asana_task": create_asana_task
         }
         
         # Add the openai response(Tool call response) to the messages list
@@ -60,7 +97,7 @@ def get_openai_response(messages, nested_calls=0):
 def main():
     # Initialize messages list with system message
     messages = [
-            SystemMessage(content=f"You are a helpful assistant who manages asana tasks. Todays date is {datetime.now()}"),
+            SystemMessage(content=f"You are a helpful assistant who manages asana tasks. Todays date is {datetime.now()}. If you need any details from the user, ask for them before creating tasks"),
         ]
         
     while True:
