@@ -65,30 +65,46 @@ def get_openai_response(messages, nested_calls=0):
         # list of all available tools
         tools = [create_asana_task]
         
-        # Create a client and bind the tools to it
+        # Create a client with streaming enabled and bind the tools to it
         client = ChatOpenAI(
             model=model,
-            api_key=api_key
+            api_key=api_key,
+            streaming=True
         )
         client_with_tools = client.bind_tools(tools)
         
-        # Invoke the client with the messages
-        ai_response = client_with_tools.invoke(messages)
+        # Create a generator for streaming responses
+        response_generator = client_with_tools.stream(messages)
         
-        # Count the number of tool calls in the response
-        tool_calls = len(ai_response.tool_calls)
-
-        # If there are tool calls, call the tools and add the results to the messages list
-        if tool_calls > 0:
+        # Initialize variables for handling streaming
+        current_content = ""
+        tool_calls = []
+        
+        # Process each chunk in the stream
+        for chunk in response_generator:
+            # Update content if present in chunk
+            if chunk.content:
+                current_content += chunk.content
+                yield "content", current_content
+            
+            # Collect tool calls if present
+            if chunk.tool_calls:
+                tool_calls.extend(chunk.tool_calls)
+        
+        # Create final AI response
+        ai_response = AIMessage(content=current_content, tool_calls=tool_calls)
+        
+        # If there are tool calls, process them
+        if tool_calls:
             available_functions = {
                 "create_asana_task": create_asana_task
             }
             
-            # Add the openai response(Tool call response) to the messages list
+            # Add the AI response to messages
             messages.append(ai_response)
             
             print("Tool calls: ")
-            for tool_call in ai_response.tool_calls:
+            for tool_call in tool_calls:
                 function_name = tool_call['name'].lower()
                 tool_call_id = tool_call['id']
                 tool_call_function = available_functions.get(function_name)
@@ -96,12 +112,14 @@ def get_openai_response(messages, nested_calls=0):
                 messages.append(ToolMessage(tool_output, tool_call_id=tool_call_id))
                 print(f"Tool call: {tool_call['name']} with args: {tool_call['args']}")
                 
-            # Call the AI again so it can produce a response with the result of calling the tool(s)
-            ai_response = get_openai_response(messages, nested_calls + 1)      
-        
-        return ai_response
+            # Call the AI again for final response after tool calls
+            for content_type, content in get_openai_response(messages, nested_calls + 1):
+                yield content_type, content
+        else:
+            yield "final", ai_response
+            
     except Exception as e:
-        return AIMessage(content=f"An error occurred: {str(e)}")
+        yield "error", AIMessage(content=f"An error occurred: {str(e)}")
 
 def main():
     st.title("Asana Chat Agent")
@@ -120,14 +138,22 @@ def main():
         st.session_state.messages.append(HumanMessage(content=prompt))
         st.chat_message("user").write(prompt)
 
-        # Get AI response
-        with st.spinner("Thinking..."):
-            response = get_openai_response(st.session_state.messages)
-            st.session_state.messages.append(response)
-            st.chat_message("assistant").write(response.content)
-        
-        # Rerun to update the chat history
-        st.rerun()
+        # Create a placeholder for the streaming response
+        with st.chat_message("assistant"):
+            response_placeholder = st.empty()
+            current_response = ""
+
+            # Stream the AI response
+            for content_type, content in get_openai_response(st.session_state.messages):
+                if content_type == "content":
+                    current_response = content
+                    response_placeholder.markdown(current_response + "▌")
+                elif content_type == "final":
+                    response_placeholder.markdown(content.content)
+                    st.session_state.messages.append(content)
+                elif content_type == "error":
+                    response_placeholder.markdown(content.content)
+                    st.session_state.messages.append(content)
 
 if __name__ == "__main__":
     main()
