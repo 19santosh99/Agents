@@ -49,3 +49,6 @@ dependencies:
       - twilio
       - pydub
       - asana
+      - langchain_huggingface
+      - streamlit
+      - groq
