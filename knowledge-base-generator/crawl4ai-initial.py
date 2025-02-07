@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 from urllib.parse import urljoin
-
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from openai import AsyncOpenAI
 from supabase import create_client, Client
@@ -43,7 +42,7 @@ def get_pydantic_ai_docs_urls(base_url):
     rp.read()
 
     # Try to fetch sitemap.xml
-    sitemap_url = urljoin(base_url, '/sitmap.xml')
+    sitemap_url = urljoin(base_url, '/sitemap.xml')
     response = requests.get(sitemap_url)
     
     if response.status_code == 200:
