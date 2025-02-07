@@ -34,7 +34,7 @@ def clean_url(url: str) -> str:
         cleaned_url += f"?{parsed_url.query}"
     return cleaned_url
 
-def get_pydantic_ai_docs_urls(base_url):
+def get_documentaion_urls(base_url):
     # Fetch robots.txt
     robots_url = urljoin(base_url, '/robots.txt')
     rp = RobotFileParser()
@@ -96,14 +96,33 @@ def crawl_website(base_url, rp, max_pages=100):
                 print(f"Failed to fetch {url}")
     print("Crawled URLs Length: ", len(urls))
     return urls
-    
-    
+
+async def fetch_content_from_urls(urls: List[str]) -> str:
+    try:
+        run_conf = CrawlerRunConfig(
+            cache_mode=CacheMode.BYPASS
+        )
+        
+        async with AsyncWebCrawler() as crawler:
+            results = await crawler.arun_many(urls, config=run_conf)
+            for res in results:
+                if res.success:
+                    print(f"[OK] {res.url}, length: {len(res.markdown_v2.raw_markdown)}")
+                else:
+                    print(f"[ERROR] {res.url} => {res.error_message}")
+    except Exception as e:
+        print(f"Error fetching content: {e}")    
 
 async def main() -> None:
     # lets get all the URLs required to scrape from the base URL
-    urls = get_pydantic_ai_docs_urls("https://docs.crawl4ai.com/")
+    urls: List[str] = get_documentaion_urls("https://docs.crawl4ai.com/")
     
-    print(urls)
+    if len(urls) > 0:
+        # crawl the URLs
+        await fetch_content_from_urls(urls)
+    else:
+        print("Failed to get URLs")
+        return
 
 if __name__ == "__main__":
     asyncio.run(main())
