@@ -52,3 +52,5 @@ dependencies:
       - langchain_huggingface
       - streamlit
       - groq
+      - crawl4ai
+      - playwright
